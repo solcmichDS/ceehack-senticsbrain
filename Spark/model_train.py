@@ -36,7 +36,7 @@ tfsim.utils.tf_cap_memory()
 BATCH_SIZE = 64
 NUM_EPOCHS = 20
 SHAPE = (2000,)
-TRAINING_SAMPLE_SIZE = 150000
+TRAINING_SAMPLE_SIZE = 50000
 
 # COMMAND ----------
 
@@ -59,11 +59,15 @@ df_train_pandas = df_train.toPandas()
 
 def get_model():
     inputs = tf.keras.layers.Input(shape=SHAPE)
-    x = tf.keras.layers.BatchNormalization()(inputs)
-    x = tf.keras.layers.Dense(256)(x)
-    x = tf.keras.layers.Dense(128)(x)
-    outputs = tfsim.layers.MetricEmbedding(64)(x)
-    return tfsim.models.SimilarityModel(inputs, outputs)
+    inputs_normalized = tf.keras.layers.BatchNormalization()(inputs)
+    # x = tf.keras.layers.Dense(256)(x)
+    x = tf.keras.layers.Dense(256)(inputs_normalized)
+    x = tf.expand_dims(x, 2)
+    lstm = tf.keras.layers.LSTM(128)
+    x = lstm(x)
+    x = tf.keras.layers.Dense(64)(x)
+    outputs = tfsim.layers.MetricEmbedding(32)(x)
+    return tfsim.models.SimilarityModel(inputs_normalized, outputs)
 
 model = get_model()
 model.summary()
@@ -91,7 +95,7 @@ model = get_compiled_model(lr=0.0001)
 with mlflow.start_run(run_name="similarity_model_training") as run:
     hist = model.fit(sampler, 
                      steps_per_epoch=1000,
-                     epochs=40,
+                     epochs=30,
                      verbose=2,)
     mlflow.keras.log_model(
          model,
@@ -161,6 +165,7 @@ def visualize_pca_for_patients(df, n_patients = 3, n_samples_per_patient = 100):
 plt.rcParams["figure.figsize"] = (20,13)
 df_pcad = visualize_pca_for_patients(df_train_pandas, n_patients=20, n_samples_per_patient=40)
 
+
 # COMMAND ----------
 
 plt.rcParams["figure.figsize"] = (13,8)
@@ -171,7 +176,7 @@ plt.rcParams["figure.figsize"] = (13,8)
 
 # COMMAND ----------
 
-df_single = df_pcad[df_pcad.id == '26732096']
+df_single = df_pcad[df_pcad.id == '11469620']
 fig, ax = plt.subplots()
 ax.plot(df_single.pca_x, df_single.pca_y, marker='o', linestyle='', ms=5, label=df_single.index)
 centroid_x = df_single.pca_x.mean()
@@ -212,7 +217,7 @@ def plot_normal_and_outliers(df, id):
     mx = df_single.distance.max()
     m = df_single.distance.mean()
     m_std = df_single.distance.std()
-    if mx > m + 5*m_std:
+    if mx > m + 2*m_std:
         plt.plot(df_single.iloc[-1].slice, color='red')
         plt.title('Potential outlier')
         plt.grid(visible=True)
